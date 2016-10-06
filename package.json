@@ -1,0 +1,17 @@
+{
+  "name": "data-transformer",
+  "version": "1.0.0",
+  "description": "Zip-to-json transformer",
+  "main": "script.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node script.js"
+  },
+  "author": "Anton Povzun",
+  "license": "ISC",
+  "devDependencies": {
+    "fast-csv": "^2.3.0",
+    "unzip": "^0.1.11"
+  },
+  "dependencies": {}
+}
