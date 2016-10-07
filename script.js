@@ -1,7 +1,8 @@
 const fs      = require('fs'),
       unzip   = require('unzip'),
       csv     = require('fast-csv'),
-      csvFile = './result.csv';
+      csvFile = './result.csv',
+      resultJsonFile = 'data.json';
 
 let arr  = [],
     json = [];
@@ -18,33 +19,24 @@ new Promise((resolve, reject) => {
 
   fs.createReadStream('./result.csv')
     .pipe(csv({delimiter: '|', headers: true}))
-    .on('data', data => {
-
-      arr.push(data);
-    })
-    .on('end', data => {
+    .on('data', data => arr.push(data))
+    .on('end', () => {
       
-      json = arr.map(i => {
-        let obj = {
-          "name": `${i.first_name} ${i.last_name}`,
-          "phone": i.phone,
-          "person": {
-            "firstName": i.first_name,
-            "lastName": i.last_name
-          },
-          "amount": parseInt(i.amount),
-          "date": i.date.split('/').reverse().join('-'),
-          "costCenterNum": i.cc
-        };
-
-        return obj;
-      });
+      json = arr.map(i => ({
+        "name": `${i.first_name} ${i.last_name}`,
+        "phone": i.phone,
+        "person": {
+          "firstName": i.first_name,
+          "lastName": i.last_name
+        },
+        "amount": parseInt(i.amount),
+        "date": i.date.split('/').reverse().join('-'),
+        "costCenterNum": i.cc
+      }));
       
 
-      fs.writeFileSync('data.json', JSON.stringify(json));
+      fs.writeFileSync(resultJsonFile, JSON.stringify(json));
       
-      fs.unlink(csvFile, () => {
-        console.log('Done!');
-      });
+      fs.unlink(csvFile, () => console.log('Done!'));
     });
 });
