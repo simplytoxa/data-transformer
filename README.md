@@ -6,6 +6,6 @@ Transforms files in zip-archive to json-file
 
 2) npm i
 
-3) npm start
+3) npm start or node test.js
 
 Then simply find **data.json** to see the results.
