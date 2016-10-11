@@ -2,70 +2,118 @@
 
 module.exports = zipFile => {
   const fs             = require('fs'),
-        unzip          = require('unzip'),
         csv            = require('fast-csv'),
         es             = require('event-stream'),
-        csvFile        = './result.csv',
+        extract        = require('extract-zip'),
         resultJsonFile = './data.json';
-
-  let arr  = [],
-      json = [];
 
   new Promise((resolve, reject) => {
 
-    fs.createReadStream(zipFile)
-      .pipe(unzip.Parse())
-      .on('entry', entry => entry.pipe(fs.createWriteStream(csvFile)))
-      .on('close', () => resolve())
-      .on('error', error => reject(new Error(error)));
+    extract(zipFile, {dir: 'unzipped'}, err => {
+
+      err && reject(new Error(err));
+
+      resolve();
+    });
 
   }).then(() => {
 
-    let lineNr    = 0,
+    let lineNr = 0,
         headers   = [],
-        file      = fs.readFileSync(csvFile, {encoding: 'utf-8'}),
+        file = '',
+        firstline = '',
+        lastLineNr = 0,
+        /**
+         * The function that transforms data from .csv to .json
+         * @return {data.json} Creates data.json file
+         */
+        transformFunc = (csvFile, idx) => {
+
+          idx === 0 && fs.appendFile(resultJsonFile, '[');
+
+          csv
+            .fromString(firstline, {delimiter: '|'})
+            .on('data', data => headers = data);
+
+          let stream = fs.createReadStream(`./unzipped/${csvFile}`)
+            .pipe(es.split())
+            .pipe(es.mapSync(line => {
+                stream.pause();
+
+                lineNr++;
+
+                if (lineNr > 1) {
+                  csv
+                    .fromString(line, {delimiter: '|', headers: headers})
+                    .on('error', err => {
+                      parseErr = true;
+                      transformFunc();
+                    })
+                    .on('data', data => {
+                      let obj = {
+                        "name": `${data.first_name} ${data.last_name}`,
+                        "phone": data.phone,
+                        "person": {
+                          "firstName": data.first_name,
+                          "lastName": data.last_name
+                        },
+                        "amount": parseInt(data.amount),
+                        "date": data.date.split('/').reverse().join('-'),
+                        "costCenterNum": data.cc
+                      };
+
+                    fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}, `);
+                    });
+                }
+
+                stream.resume();
+              })
+              .on('error', err => console.log('EventStream-ERROR', err))
+              .on('end', () => {
+                fs.appendFile(resultJsonFile, ']');
+                console.log(lastLineNr);
+
+                // fs.unlink(csvFile, () => console.log('Done!'));
+              }));
+        };
+
+    // fs.unlink('unziped', err => console.log(err)); //Removing folder
+
+    fs.readdir('./unzipped', (err, files) => {
+      if (err) {
+
+        err.code === 'ENOENT' && console.log('No such directory "./unzipped"');
+
+        return console.error(err);
+      }
+
+      /**
+       * Take each unzipped csv file and parse
+       */
+      files.forEach((csvFile, idx) => {
+        file      = fs.readFileSync(`./unzipped/${csvFile}`, {encoding: 'utf-8'});
         firstline = file.split('\n')[0];
 
-    csv
-      .fromString(firstline, {delimiter: '|'})
-      .on('data', data => headers = data);
-
-    let stream = fs.createReadStream(csvFile)
-      .pipe(es.split())
-      .pipe(es.mapSync(line => {
-          stream.pause();
-
-          lineNr++;
+        // Determining last line
+        file.split('\n').forEach((i, idx) => lastLineNr = idx);
 
 
-          if (lineNr > 1) {
-            csv
-              .fromString(line, {delimiter: '|', headers: headers})
-              .on('data', data => {
-                arr.push(data);
-              });
+        /**
+         * Remove old data.json file if it exists or create the new one
+         */
+        fs.stat(resultJsonFile, (err, stats) => {
+          if (err) {
+
+            if (err.code === 'ENOENT' ) {
+              return transformFunc(csvFile, idx);
+            }
+
+            return console.error(err);
           }
 
-          stream.resume();
-        })
-          .on('end', () => {
-            json = arr.map(i => ({
-              "name": `${i.first_name} ${i.last_name}`,
-              "phone": i.phone,
-              "person": {
-                "firstName": i.first_name,
-                "lastName": i.last_name
-              },
-              "amount": parseInt(i.amount),
-              "date": i.date.split('/').reverse().join('-'),
-              "costCenterNum": i.cc
-            }));
-
-
-            fs.writeFileSync(resultJsonFile, JSON.stringify(json));
-
-            fs.unlink(csvFile, () => console.log('Done!'));
-          })
-      );
-  });
+          fs.unlink(resultJsonFile, () => transformFunc(csvFile, idx));
+        });
+      });
+    });
+  }).catch(err => console.log(err));
 };

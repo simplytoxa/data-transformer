@@ -2,3 +2,5 @@
 node_modules/
 bash.exe.stackdump
 data.json
+npm-debug.log
+unzipped/
