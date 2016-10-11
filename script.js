@@ -36,7 +36,7 @@ module.exports = zipFile => {
           firstline = file.split('\n')[0];
 
           // Determining last line
-          file.split('\n').forEach((i, indx) => lastLineNr = indx);
+          file.split('\n').forEach((i, indx) => lastLineNr = indx + 1);
 
           resolve();
         });
@@ -51,91 +51,102 @@ module.exports = zipFile => {
          * @return {data.json} Creates data.json file
          */
         transformFunc = () => {
+          new Promise(res => {
+            fs.appendFile(resultJsonFile, '[', err => err && console.log(err));
 
-          fs.appendFile(resultJsonFile, '[');
+            csv
+              .fromString(firstline, {delimiter: '|'})
+              .on('data', data => headers = data);
 
-          csv
-            .fromString(firstline, {delimiter: '|'})
-            .on('data', data => headers = data);
+            let lr = new LineByLineReader(csvFile);
 
-          let lr = new LineByLineReader(csvFile);
+            lr.on('line', function (line) {
+            	// pause emitting of lines...
+            	lr.pause();
 
-          lr.on('line', function (line) {
-          	// pause emitting of lines...
-          	lr.pause();
+              lineNr++;
 
-            lineNr++;
+              firstline.includes(line) && lastLineNr--;
 
-            if (lineNr > 1 && !firstline.includes(line)) {
-              let obj = {};
+              if (lineNr > 1 && !firstline.includes(line)) {
+                let obj = {};
 
-              csv
-                .fromString(line, {delimiter: '|', headers: headers})
-                .on('error', err => console.log(err))
-                .on('data', data => {
-                  obj = {
-                    "name": `${data.first_name} ${data.last_name}`,
-                    "phone": data.phone,
-                    "person": {
-                      "firstName": data.first_name,
-                      "lastName": data.last_name
-                    },
-                    "amount": parseInt(data.amount),
-                    "date": data.date.split('/').reverse().join('-'),
-                    "costCenterNum": data.cc
-                  };
+                csv
+                  .fromString(line, {delimiter: '|', headers: headers})
+                  .on('error', err => console.log(err))
+                  .on('data', data => {
+                    obj = {
+                      "name": `${data.first_name} ${data.last_name}`,
+                      "phone": data.phone,
+                      "person": {
+                        "firstName": data.first_name,
+                        "lastName": data.last_name
+                      },
+                      "amount": parseInt(data.amount),
+                      "date": data.date.split('/').reverse().join('-'),
+                      "costCenterNum": data.cc
+                    };
 
-                  fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}, `, err => err && console.log(err));
-              });
-            }
+                    if (lineNr === lastLineNr + 2) {
+                      fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}`, err => err && console.log(err));
+                    } else {
+                      fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}, `, err => err && console.log(err));
+                    }
+                });
+              }
 
-            lr.resume();
+              lr.resume();
+            });
+
+            lr.on('end', function () {
+              res();
+              // console.log(lastLineNr);
+            });
+
+
+            // let stream = fs.createReadStream(csvFile)
+            //   .pipe(es.split())
+            //   .pipe(es.mapSync(line => {
+            //       stream.pause();
+            //
+            //       lineNr++;
+            //
+            //       if (lineNr > 1 && !firstline.includes(line)) {
+            //         csv
+            //           .fromString(line, {delimiter: '|', headers: headers})
+            //           .on('error', err => console.log(err))
+            //           .on('data', data => {
+            //             let obj = {
+            //               "name": `${data.first_name} ${data.last_name}`,
+            //               "phone": data.phone,
+            //               "person": {
+            //                 "firstName": data.first_name,
+            //                 "lastName": data.last_name
+            //               },
+            //               "amount": parseInt(data.amount),
+            //               "date": data.date.split('/').reverse().join('-'),
+            //               "costCenterNum": data.cc
+            //             };
+            //
+            //           fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}, `);
+            //           });
+            //       }
+            //
+            //       stream.resume();
+            //     })
+            //     .on('error', err => console.log('EventStream-ERROR', err))
+            //     .on('end', () => {
+            //       fs.appendFile(resultJsonFile, ']');
+            //       console.log(lastLineNr);
+            //
+            //       // fs.unlink(csvFile, () => console.log('Done!'));
+            //     }));
+          }).then(() => {
+            setTimeout(() => {fs.appendFile(resultJsonFile, ']', err => err && console.log(err))}, 2000);
+            // fs.appendFile(resultJsonFile, ']', err => err && console.log(err));
           });
-
-          lr.on('end', function () {
-            fs.appendFile(resultJsonFile, ']', err => err && console.log(err));
-            console.log(lastLineNr);
-          });
-
-
-          // let stream = fs.createReadStream(csvFile)
-          //   .pipe(es.split())
-          //   .pipe(es.mapSync(line => {
-          //       stream.pause();
-          //
-          //       lineNr++;
-          //
-          //       if (lineNr > 1 && !firstline.includes(line)) {
-          //         csv
-          //           .fromString(line, {delimiter: '|', headers: headers})
-          //           .on('error', err => console.log(err))
-          //           .on('data', data => {
-          //             let obj = {
-          //               "name": `${data.first_name} ${data.last_name}`,
-          //               "phone": data.phone,
-          //               "person": {
-          //                 "firstName": data.first_name,
-          //                 "lastName": data.last_name
-          //               },
-          //               "amount": parseInt(data.amount),
-          //               "date": data.date.split('/').reverse().join('-'),
-          //               "costCenterNum": data.cc
-          //             };
-          //
-          //           fs.appendFile(resultJsonFile, `${JSON.stringify(obj)}, `);
-          //           });
-          //       }
-          //
-          //       stream.resume();
-          //     })
-          //     .on('error', err => console.log('EventStream-ERROR', err))
-          //     .on('end', () => {
-          //       fs.appendFile(resultJsonFile, ']');
-          //       console.log(lastLineNr);
-          //
-          //       // fs.unlink(csvFile, () => console.log('Done!'));
-          //     }));
         };
+
 
     // fs.unlink('unziped', err => console.log(err)); //Removing folder
 
