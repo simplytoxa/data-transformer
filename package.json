@@ -1,6 +1,6 @@
 {
   "name": "data-transformer",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Zip-to-json transformer",
   "main": "script.js",
   "scripts": {
@@ -15,9 +15,6 @@
     "concat-files": "^0.1.0",
     "csvtojson": "^1.0.3",
     "event-stream": "^3.3.4",
-    "extract-zip": "^1.5.0",
-    "fast-csv": "^2.3.0",
-    "line-by-line": "^0.1.5",
-    "stream": "0.0.2"
+    "extract-zip": "^1.5.0"
   }
 }

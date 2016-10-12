@@ -2,53 +2,49 @@
 
 module.exports = zipFile => {
   const fs             = require('fs'),
-        csv            = require('fast-csv'),
         es             = require('event-stream'),
         extract        = require('extract-zip'),
         concat         = require('concat-files'),
-        csvFile        = './result.csv',
+        JSONStream     = require('JSONStream'),
+        Converter      = require("csvtojson").Converter,
+        csvConverter   = new Converter({
+          workerNum: 4,
+          constructResult: false,
+          delimiter: '|',
+          toArrayString: true,
+          trim: true,
+          ignoreEmpty: true
+        }),
+        csvFile        = './_tmp/result.csv',
         resultJsonFile = './data.json';
 
-  let firstline = '',
-      lineNr = 0,
+  let lineNr = 0,
       lastLineNr = 0;
 
-  var LineByLineReader = require('line-by-line');
-  var Converter = require("csvtojson").Converter;
-  let JSONStream = require('JSONStream');
-  var csvConverter = new Converter({
-    workerNum:4,
-    constructResult: false,
-    delimiter: '|',
-    toArrayString: true,
-    trim: true,
-    ignoreEmpty: true
-  });
+  return new Promise((resolve, reject) => {
 
-  new Promise((resolve, reject) => {
-
-    extract(zipFile, {dir: 'unzipped'}, err => {
+    extract(zipFile, {dir: '_tmp'}, err => {
 
       err && reject(new Error(err));
 
-      fs.readdir('./unzipped', (err, files) => {
+      fs.readdir('./_tmp', (err, files) => {
         if (err) {
 
-          err.code === 'ENOENT' && console.log('No such directory "./unzipped"');
+          err.code === 'ENOENT' && console.log('No such directory "./_tmp"');
 
           return console.error(err);
         }
 
-        files = files.map(file => `./unzipped/${file}`);
+        files = files.map(file => `./_tmp/${file}`);
 
+        // Concatenating files unzipped files
         concat(files, csvFile, () => {
-          let readStream = fs.createReadStream(csvFile);
+          let readStream = fs.createReadStream(csvFile),
+              writeStream = fs.createWriteStream('./_tmp/_data.json');
 
-          csvConverter.on("record_parsed",function(resultRow,rawRow,rowIndex){
+          csvConverter.on('record_parsed', (resultRow, rawRow, rowIndex) => {
             lastLineNr = rowIndex;
           });
-
-          let writeStream = fs.createWriteStream(resultJsonFile);
 
           readStream.pipe(csvConverter).pipe(writeStream).on('close', () => resolve());
         });
@@ -56,16 +52,17 @@ module.exports = zipFile => {
     });
   }).then(() => {
 
-      let writeStream = fs.createWriteStream('RESULT.json');
+      let writeStream = fs.createWriteStream(resultJsonFile),
+          obj = {};
 
-      var getStream = function () {
-        var jsonData = 'data.json',
-            stream = fs.createReadStream(jsonData, {encoding: 'utf8'}),
+      let getStream = () => {
+        let stream = fs.createReadStream('./_tmp/_data.json', {encoding: 'utf8'}),
             parser = JSONStream.parse('*');
-            return stream.pipe(parser);
-      };
-      let obj = {};
 
+        return stream.pipe(parser);
+      };
+
+      // Reformating .json file
       getStream()
         .pipe(es.mapSync(data => {
 
@@ -83,36 +80,32 @@ module.exports = zipFile => {
             "costCenterNum": data.cc
           };
 
-          if (lineNr - 1 === lastLineNr) {
+          if (data.first_name === "first_name") {
+            return;
+          } else if (lineNr - 1 === lastLineNr) {
+            // Last line
             return `${JSON.stringify(obj)}]`;
           } else if (lineNr === 1) {
+            // First line
             return `[${JSON.stringify(obj)}, `;
           } else {
             return `${JSON.stringify(obj)}, `;
           }
         }))
-        .on('end', () => {
-          console.log('end');
-          console.log(lineNr);
-          console.log(lastLineNr);
-        })
-        .pipe(writeStream);
+        .pipe(writeStream)
+        .on('close', () => {
+          const dir = './_tmp';
 
+        	fs.readdir(dir, (err, files) => {
+            err && console.log(err);
 
-    // /**
-    //  * Remove old data.json file if it exists or create the new one
-    //  */
-    // fs.stat(resultJsonFile, (err, stats) => {
-    //   if (err) {
-    //
-    //     if (err.code === 'ENOENT') {
-    //       return transformFunc();
-    //     }
-    //
-    //     return console.error(err);
-    //   }
-    //
-    //   fs.unlink(resultJsonFile, () => transformFunc());
-    // });
+            files.forEach((file, idx) => {
+              fs.unlink(`./_tmp/${file}`, () => {
+                // Remove the directory when the last file in it is removed
+                (idx === files.length - 1) && fs.rmdir(dir, () => console.log('Done!'));
+              });
+            });
+          });
+        });
   }).catch(err => console.log(err));
 };
